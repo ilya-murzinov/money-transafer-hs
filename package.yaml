@@ -1,0 +1,53 @@
+name:                money-transafer-hs
+version:             0.1.0.0
+github:              "ilyamurzinov/money-transafer-hs"
+license:             BSD3
+author:              "Ilya Murzinov"
+maintainer:          "example@example.com"
+copyright:           "2018 Ilya Murzinov"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+description:         Please see the README on GitHub at <https://github.com/ilyamurzinov/money-transafer-hs#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+library:
+  source-dirs: src
+  dependencies:
+  - aeson
+  - bytestring
+  - containers
+  - monad-control
+  - mtl
+  - servant
+  - servant-server
+  - stm
+  - transformers
+  - transformers-base
+  - warp
+
+executables:
+  money-transafer-hs-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - money-transafer-hs
+
+tests:
+  money-transafer-hs-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - money-transafer-hs
