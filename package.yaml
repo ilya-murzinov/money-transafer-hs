@@ -51,3 +51,8 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - money-transafer-hs
+    - http-client
+    - servant
+    - servant-client
+    - servant-client-core
+    - wai

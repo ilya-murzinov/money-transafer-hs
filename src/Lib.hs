@@ -6,7 +6,12 @@
 {-# LANGUAGE TypeOperators      #-}
 
 module Lib
-    ( runServer
+    ( Account(..)
+    , AccountId(..)
+    , Transfer(..)
+    , API
+    , api
+    , runServer
     ) where
 
 import           Control.Concurrent.STM     (STM, TVar, atomically, newTVar,
@@ -41,6 +46,8 @@ instance FromHttpApiData AccountId where
   parseUrlPiece p = do
     s <- parseUrlPiece p
     return $ AccountId s
+instance ToHttpApiData AccountId where
+  toUrlPiece (AccountId accid) = toUrlPiece accid
 
 data TransferResult = Success | Fail [Error]
 data Error = AccountNotExists AccountId
@@ -159,6 +166,6 @@ app s = serve api $ hoistServer api (nt s) server
 runServer :: Integer -> IO ()
 runServer port = do
   let masterAccId = AccountId 0
-  masterAcc <- liftIO $ atomically $ newTVar $ Account masterAccId 1000
+  masterAcc <- liftIO $ atomically $ newTVar $ Account masterAccId 1000000
   state <- liftIO $ atomically $ newTVar $ Map.singleton masterAccId masterAcc
   run (fromInteger port) $ app $ Env state
