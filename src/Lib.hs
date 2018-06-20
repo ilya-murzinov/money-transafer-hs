@@ -17,6 +17,7 @@ module Lib
 import           Control.Concurrent.STM     (STM, TVar, atomically, newTVar,
                                              orElse, readTVar, registerDelay,
                                              retry, writeTVar)
+import           Control.Monad              (forM)
 import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
 import           Data.Aeson                 (FromJSON, ToJSON)
@@ -127,6 +128,7 @@ createAccount = do
 transfer :: Transfer -> AppM Transfer
 transfer t@(Transfer from to amount) = do
   Env s <- ask
+  liftIO $ printState s
   timer <- liftIO $ registerDelay 1000
   result <- liftIO $ atomically $ do
     state <- readTVar s
@@ -148,6 +150,12 @@ showError (AccountNotExists accid) = pack $ "Account '" <> show accid <> "' does
 showError (InsufficientFunds accid) = pack $ "Account '" <> show accid <> "' has insufficient funds"
 showError (WrongAmount amount) = pack $ "Amount '" <> show amount <> "' is incorrect"
 showError Other = "Something went wrong"
+
+printState :: TVar State -> IO ()
+printState tvs = do
+  m <- atomically $ readTVar tvs
+  mm <- forM m $ \tv -> atomically $ readTVar tv
+  print $ Map.showTree mm
 
 -- Server
 

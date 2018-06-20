@@ -51,6 +51,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - money-transafer-hs
+    - async
     - http-client
     - servant
     - servant-client

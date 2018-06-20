@@ -1,7 +1,8 @@
-import           Control.Concurrent  (forkIO, threadDelay)
-import           Control.Monad       (forM, void)
-import           Network.HTTP.Client (Manager, defaultManagerSettings,
-                                      newManager)
+import           Control.Concurrent       (forkIO)
+import           Control.Concurrent.Async (mapConcurrently)
+import           Control.Monad            (forM, void)
+import           Network.HTTP.Client      (Manager, defaultManagerSettings,
+                                           newManager)
 import           Servant.API
 import           Servant.Client
 
@@ -20,10 +21,7 @@ main = do
     to = void $ execute manager $ transferE $ Transfer master accid 10
     from = void $ execute manager $ transferE $ Transfer accid master 10
 
-  _ <- forM [1..100] $ \_ -> forkIO to
-  _ <- forM [1..100] $ \_ -> forkIO from
-
-  _ <- threadDelay 10000000
+  _ <- mapConcurrently (\i -> if even i then to else from) [1..100]
 
   newMaster <- execute manager $ getAccountE master
   newAcc <- execute manager $ getAccountE accid
