@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StrictData         #-}
 {-# LANGUAGE TypeOperators      #-}
 
 module Lib
@@ -14,10 +15,11 @@ module Lib
     , runServer
     ) where
 
-import           Control.Concurrent.STM     (STM, TVar, atomically, newTVar,
-                                             orElse, readTVar, registerDelay,
-                                             retry, writeTVar)
-import           Control.Monad              (forM)
+import           Control.Concurrent.STM     (STM, TVar, atomically, modifyTVar',
+                                             newTVar, newTVarIO, orElse,
+                                             readTVar, readTVarIO,
+                                             registerDelay, retry, writeTVar)
+import           Control.Monad              (forM, guard)
 import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
 import           Data.Aeson                 (FromJSON, ToJSON)
@@ -25,7 +27,7 @@ import           Data.ByteString.Lazy.Char8 (ByteString, intercalate, pack)
 import           Data.Coerce                (coerce)
 import qualified Data.Map                   as Map
 import           Data.Monoid                ((<>))
-import           Data.Traversable           (sequenceA)
+import           Data.Traversable           (traverse)
 import           GHC.Generics               (Generic)
 import           Network.Wai.Handler.Warp   (run)
 import           Servant
@@ -34,23 +36,25 @@ import           Servant
 
 newtype AccountId = AccountId Integer
   deriving (Show, Eq, Ord, Generic, ToJSON, FromJSON)
+
 data Account = Account
   { _id      :: AccountId
   , _balance :: Integer
   } deriving (Show, Generic, ToJSON, FromJSON)
+
 data Transfer = Transfer
   { _fromAccount :: AccountId
   , _toAccount   :: AccountId
   , _amount      :: Integer
   } deriving (Show, Generic, ToJSON, FromJSON)
+
 instance FromHttpApiData AccountId where
-  parseUrlPiece p = do
-    s <- parseUrlPiece p
-    return $ AccountId s
+  parseUrlPiece p = AccountId <$> parseUrlPiece p
+
 instance ToHttpApiData AccountId where
   toUrlPiece (AccountId accid) = toUrlPiece accid
 
-data TransferResult = Success | Fail [Error]
+type TransferResult = Either [Error] ()
 data Error = AccountNotExists AccountId
   | InsufficientFunds AccountId
   | WrongAmount Integer
@@ -76,26 +80,23 @@ type API = "api" :>
 
 transferMoney :: State -> AccountId -> AccountId -> Integer -> STM TransferResult
 transferMoney state fromId toId amount =
-  if amount < 0 then return $ Fail [WrongAmount amount]
-  else do
-    let
-      fromAccM = Map.lookup fromId state
-      toAccM = Map.lookup toId state
-      changeBalance tv a = do
-        acc <- readTVar tv
-        _ <- writeTVar tv $ acc{_balance = _balance acc + a}
-        return ()
-    case (fromAccM, toAccM) of
-      (Nothing, Nothing)   -> return $ Fail [AccountNotExists fromId, AccountNotExists toId]
-      (Nothing, Just _)    -> return $ Fail [AccountNotExists fromId]
-      (Just _, Nothing)    -> return $ Fail [AccountNotExists toId]
-      (Just fromTV, Just toTV) -> do
-        Account _ fromAmount <- readTVar fromTV
-        if fromAmount >= amount then do
+  if amount < 0
+    then return $ Left [WrongAmount amount]
+    else do
+      let
+        fromAccM = Map.lookup fromId state
+        toAccM = Map.lookup toId state
+        changeBalance tv a = modifyTVar' tv $ \acc -> acc{_balance = _balance acc + a}
+      case (fromAccM, toAccM) of
+        (Nothing, Nothing)   -> return $ Left [AccountNotExists fromId, AccountNotExists toId]
+        (Nothing, Just _)    -> return $ Left [AccountNotExists fromId]
+        (Just _, Nothing)    -> return $ Left [AccountNotExists toId]
+        (Just fromTV, Just toTV) -> do
+          Account _ fromAmount <- readTVar fromTV
+          guard $ fromAmount >= amount
           _ <- changeBalance fromTV (- amount)
           _ <- changeBalance toTV amount
-          return Success
-        else retry
+          return $ Right ()
 
 -- Endpoints
 
@@ -104,7 +105,7 @@ getAccount accid = do
   Env s <- ask
   acc <- liftIO $ atomically $ do
     state <- readTVar s
-    sequenceA $ readTVar <$> Map.lookup accid state
+    traverse readTVar (Map.lookup accid state)
   case acc of
     Just a  -> return a
     Nothing -> throwError err404
@@ -122,7 +123,7 @@ createAccount = do
           l  -> maximum l + 1
         acc = Account accid 0
       tv <- newTVar acc
-      writeTVar s $ Map.insert accid tv state
+      writeTVar s $! Map.insert accid tv state
       return acc
 
 transfer :: Transfer -> AppM Transfer
@@ -136,12 +137,12 @@ transfer t@(Transfer from to amount) = do
       timeout = do
         b <- readTVar timer
         if b then
-          return $ Fail [Other]
+          return $ Left [Other]
         else retry
     (transferMoney state from to amount) `orElse` timeout
   case result of
-    Success   -> return t
-    Fail errs -> throwError err400{errBody = intercalate "," $ showError <$> errs}
+    Right ()   -> return t
+    Left errs -> throwError err400{errBody = intercalate "," $ showError <$> errs}
 
 -- Helpers
 
@@ -153,8 +154,8 @@ showError Other = "Something went wrong"
 
 printState :: TVar State -> IO ()
 printState tvs = do
-  m <- atomically $ readTVar tvs
-  mm <- forM m $ \tv -> atomically $ readTVar tv
+  m <- readTVarIO tvs
+  mm <- forM m $ \tv -> readTVarIO tv
   print $ Map.showTree mm
 
 -- Server
@@ -165,15 +166,15 @@ api = Proxy
 server :: ServerT API AppM
 server = (getAccount :<|> createAccount) :<|> transfer
 
-nt :: Env -> AppM a -> Handler a
-nt s x = runReaderT x s
-
 app :: Env -> Application
-app s = serve api $ hoistServer api (nt s) server
+app s = serve api $ hoistServer api nt server
+  where
+    nt :: AppM a -> Handler a
+    nt x = runReaderT x s
 
 runServer :: Integer -> IO ()
 runServer port = do
   let masterAccId = AccountId 0
-  masterAcc <- liftIO $ atomically $ newTVar $ Account masterAccId 1000000
-  state <- liftIO $ atomically $ newTVar $ Map.singleton masterAccId masterAcc
+  masterAcc <- liftIO $ newTVarIO $ Account masterAccId 1000000
+  state <- liftIO $ newTVarIO $ Map.singleton masterAccId masterAcc
   run (fromInteger port) $ app $ Env state

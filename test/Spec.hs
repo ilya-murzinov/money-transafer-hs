@@ -1,6 +1,6 @@
 import           Control.Concurrent       (forkIO)
 import           Control.Concurrent.Async (mapConcurrently)
-import           Control.Monad            (forM, void)
+import           Control.Monad            (void)
 import           Network.HTTP.Client      (Manager, defaultManagerSettings,
                                            newManager)
 import           Servant.API
@@ -12,19 +12,19 @@ main :: IO ()
 main = do
   _ <- forkIO $ runServer 8081
   let (getAccountE :<|> createAccountE) :<|> transferE = client api
-  manager <- newManager defaultManagerSettings
+  m <- newManager defaultManagerSettings
 
   let master = AccountId 0
-  Right (Account accid _) <- execute manager createAccountE
+  Right (Account accid _) <- execute m createAccountE
 
   let
-    to = void $ execute manager $ transferE $ Transfer master accid 10
-    from = void $ execute manager $ transferE $ Transfer accid master 10
+    to = void $ execute m $ transferE $ Transfer master accid 10
+    from = void $ execute m $ transferE $ Transfer accid master 10
 
-  _ <- mapConcurrently (\i -> if even i then to else from) [1..100]
+  _ <- mapConcurrently (\i -> if even i then to else from) ([1..100] :: [Integer])
 
-  newMaster <- execute manager $ getAccountE master
-  newAcc <- execute manager $ getAccountE accid
+  newMaster <- execute m $ getAccountE master
+  newAcc <- execute m $ getAccountE accid
 
   print newMaster
   print newAcc
@@ -32,4 +32,4 @@ main = do
   return ()
   where
     execute :: Manager -> ClientM a -> IO (Either ServantError a)
-    execute manager req = runClientM req (ClientEnv manager (BaseUrl Http "localhost" 8081 ""))
+    execute m req = runClientM req (ClientEnv m (BaseUrl Http "localhost" 8081 ""))
