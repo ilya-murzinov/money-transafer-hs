@@ -17,14 +17,13 @@ module Lib
 
 import           Control.Concurrent.STM     (STM, TVar, atomically, modifyTVar',
                                              newTVar, newTVarIO, orElse,
-                                             readTVar, readTVarIO,
-                                             registerDelay, retry, writeTVar)
-import           Control.Monad              (forM, guard)
+                                             readTVar, registerDelay, retry,
+                                             writeTVar)
+import           Control.Monad              (guard)
 import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
 import           Data.Aeson                 (FromJSON, ToJSON)
 import           Data.ByteString.Lazy.Char8 (ByteString, intercalate, pack)
-import           Data.Coerce                (coerce)
 import qualified Data.Map                   as Map
 import           Data.Monoid                ((<>))
 import           Data.Traversable           (traverse)
@@ -48,6 +47,11 @@ data Transfer = Transfer
   , _amount      :: Integer
   } deriving (Show, Generic, ToJSON, FromJSON)
 
+data Config = Config
+  { _masterAccountBalance :: Integer
+  , _transferTimeout      :: Int
+  }
+
 instance FromHttpApiData AccountId where
   parseUrlPiece p = AccountId <$> parseUrlPiece p
 
@@ -62,7 +66,11 @@ data Error = AccountNotExists AccountId
 
 type State = Map.Map AccountId (TVar Account)
 
-newtype Env = Env (TVar State)
+data Env = Env
+  { _config :: Config
+  , _state  :: TVar State
+  , _nextId :: TVar Integer
+  }
 
 type AppM = ReaderT Env Handler
 
@@ -95,14 +103,13 @@ transferMoney state fromId toId amount =
           Account _ fromAmount <- readTVar fromTV
           guard $ fromAmount >= amount
           _ <- changeBalance fromTV (- amount)
-          _ <- changeBalance toTV amount
-          return $ Right ()
+          Right <$> changeBalance toTV amount
 
 -- Endpoints
 
 getAccount :: AccountId -> AppM Account
 getAccount accid = do
-  Env s <- ask
+  Env _ s _ <- ask
   acc <- liftIO $ atomically $ do
     state <- readTVar s
     traverse readTVar (Map.lookup accid state)
@@ -112,34 +119,33 @@ getAccount accid = do
 
 createAccount :: AppM Account
 createAccount = do
-  Env s <- ask
+  Env _ s n <- ask
   liftIO $ atomically $
     do
       state <- readTVar s
+      nextId <- readTVar n
       let
-        ids = coerce <$> Map.keys state
-        accid = AccountId $ case ids of
-          [] -> 1
-          l  -> maximum l + 1
+        accid = AccountId nextId
         acc = Account accid 0
       tv <- newTVar acc
       writeTVar s $! Map.insert accid tv state
+      writeTVar n $ nextId + 1
       return acc
 
 transfer :: Transfer -> AppM Transfer
 transfer t@(Transfer from to amount) = do
-  Env s <- ask
-  liftIO $ printState s
-  timer <- liftIO $ registerDelay 1000
-  result <- liftIO $ atomically $ do
-    state <- readTVar s
-    let
-      timeout = do
-        b <- readTVar timer
-        if b then
-          return $ Left [Other]
-        else retry
-    (transferMoney state from to amount) `orElse` timeout
+  Env (Config _ transferTimeout) s _ <- ask
+  result <- liftIO $ do
+    timer <- registerDelay transferTimeout
+    atomically $ do
+      state <- readTVar s
+      let
+        timeout = do
+          b <- readTVar timer
+          if b then
+            return $ Left [Other]
+          else retry
+      (transferMoney state from to amount) `orElse` timeout
   case result of
     Right ()   -> return t
     Left errs -> throwError err400{errBody = intercalate "," $ showError <$> errs}
@@ -151,12 +157,6 @@ showError (AccountNotExists accid) = pack $ "Account '" <> show accid <> "' does
 showError (InsufficientFunds accid) = pack $ "Account '" <> show accid <> "' has insufficient funds"
 showError (WrongAmount amount) = pack $ "Amount '" <> show amount <> "' is incorrect"
 showError Other = "Something went wrong"
-
-printState :: TVar State -> IO ()
-printState tvs = do
-  m <- readTVarIO tvs
-  mm <- forM m $ \tv -> readTVarIO tv
-  print $ Map.showTree mm
 
 -- Server
 
@@ -174,7 +174,11 @@ app s = serve api $ hoistServer api nt server
 
 runServer :: Integer -> IO ()
 runServer port = do
+  let config = Config 1000000 1000000
   let masterAccId = AccountId 0
-  masterAcc <- liftIO $ newTVarIO $ Account masterAccId 1000000
-  state <- liftIO $ newTVarIO $ Map.singleton masterAccId masterAcc
-  run (fromInteger port) $ app $ Env state
+  (state, n) <- liftIO $ do
+    masterAcc <- newTVarIO $ Account masterAccId $ _masterAccountBalance config
+    s <- newTVarIO $ Map.singleton masterAccId masterAcc
+    n <- newTVarIO 1
+    return (s, n)
+  run (fromInteger port) $ app $ Env config state n

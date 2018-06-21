@@ -21,7 +21,7 @@ main = do
     to = void $ execute m $ transferE $ Transfer master accid 10
     from = void $ execute m $ transferE $ Transfer accid master 10
 
-  _ <- mapConcurrently (\i -> if even i then to else from) ([1..100] :: [Integer])
+  _ <- mapConcurrently (\i -> if even i then to else from) ([1..1000] :: [Integer])
 
   newMaster <- execute m $ getAccountE master
   newAcc <- execute m $ getAccountE accid
