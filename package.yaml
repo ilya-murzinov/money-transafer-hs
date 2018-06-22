@@ -1,6 +1,6 @@
-name:                money-transafer-hs
+name:                money-transfer-hs
 version:             0.1.0.0
-github:              "ilyamurzinov/money-transafer-hs"
+github:              "ilyamurzinov/money-transfer-hs"
 license:             BSD3
 author:              "Ilya Murzinov"
 maintainer:          "example@example.com"
@@ -10,7 +10,7 @@ extra-source-files:
 - README.md
 - ChangeLog.md
 
-description:         Please see the README on GitHub at <https://github.com/ilyamurzinov/money-transafer-hs#readme>
+description:         Please see the README on GitHub at <https://github.com/ilyamurzinov/money-transfer-hs#readme>
 
 dependencies:
 - base >= 4.7 && < 5
@@ -34,7 +34,7 @@ library:
   - warp
 
 executables:
-  money-transafer-hs-exe:
+  money-transfer-hs-exe:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -44,10 +44,10 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - money-transafer-hs
+    - money-transfer-hs
 
 tests:
-  money-transafer-hs-test:
+  money-transfer-hs-test:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
@@ -56,7 +56,7 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - money-transafer-hs
+    - money-transfer-hs
     - async
     - http-client
     - HUnit

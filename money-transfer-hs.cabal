@@ -1,0 +1,85 @@
+-- This file has been generated from package.yaml by hpack version 0.20.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: b4dc5440e8b9f1379e44d0e07cb16fe680bdece731d46ac44636a84d350aff79
+
+name:           money-transfer-hs
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/ilyamurzinov/money-transfer-hs#readme>
+homepage:       https://github.com/ilyamurzinov/money-transfer-hs#readme
+bug-reports:    https://github.com/ilyamurzinov/money-transfer-hs/issues
+author:         Ilya Murzinov
+maintainer:     example@example.com
+copyright:      2018 Ilya Murzinov
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
+
+extra-source-files:
+    ChangeLog.md
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/ilyamurzinov/money-transfer-hs
+
+library
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -Werror
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , monad-control
+    , mtl
+    , servant
+    , servant-server
+    , stm
+    , transformers
+    , transformers-base
+    , warp
+  exposed-modules:
+      Lib
+  other-modules:
+      Paths_money_transafer_hs
+  default-language: Haskell2010
+
+executable money-transfer-hs-exe
+  main-is: Main.hs
+  hs-source-dirs:
+      app
+  ghc-options: -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , money-transfer-hs
+  other-modules:
+      Paths_money_transafer_hs
+  default-language: Haskell2010
+
+test-suite money-transfer-hs-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      HUnit
+    , QuickCheck
+    , async
+    , base >=4.7 && <5
+    , http-client
+    , money-transfer-hs
+    , servant
+    , servant-client
+    , servant-client-core
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
+    , wai
+  other-modules:
+      Paths_money_transafer_hs
+  default-language: Haskell2010
