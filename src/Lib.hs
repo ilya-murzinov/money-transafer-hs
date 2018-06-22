@@ -56,7 +56,7 @@ instance FromHttpApiData AccountId where
   parseUrlPiece p = AccountId <$> parseUrlPiece p
 
 instance ToHttpApiData AccountId where
-  toUrlPiece (AccountId accid) = toUrlPiece accid
+  toUrlPiece (AccountId accId) = toUrlPiece accId
 
 type TransferResult = Either [Error] ()
 data Error = AccountNotExists AccountId
@@ -88,7 +88,7 @@ type API = "api" :>
 
 transferMoney :: State -> AccountId -> AccountId -> Integer -> STM TransferResult
 transferMoney state fromId toId amount =
-  if amount < 0
+  if amount <= 0
     then return $ Left [WrongAmount amount]
     else do
       let
@@ -108,11 +108,11 @@ transferMoney state fromId toId amount =
 -- Endpoints
 
 getAccount :: AccountId -> AppM Account
-getAccount accid = do
+getAccount accId = do
   Env _ s _ <- ask
   acc <- liftIO $ atomically $ do
     state <- readTVar s
-    traverse readTVar (Map.lookup accid state)
+    traverse readTVar (Map.lookup accId state)
   case acc of
     Just a  -> return a
     Nothing -> throwError err404
@@ -125,10 +125,10 @@ createAccount = do
       state <- readTVar s
       nextId <- readTVar n
       let
-        accid = AccountId nextId
-        acc = Account accid 0
+        accId = AccountId nextId
+        acc = Account accId 0
       tv <- newTVar acc
-      writeTVar s $! Map.insert accid tv state
+      writeTVar s $! Map.insert accId tv state
       writeTVar n $ nextId + 1
       return acc
 
@@ -153,8 +153,8 @@ transfer t@(Transfer from to amount) = do
 -- Helpers
 
 showError :: Error -> ByteString
-showError (AccountNotExists accid) = pack $ "Account '" <> show accid <> "' doesn't exist"
-showError (InsufficientFunds accid) = pack $ "Account '" <> show accid <> "' has insufficient funds"
+showError (AccountNotExists accId) = pack $ "Account '" <> show accId <> "' doesn't exist"
+showError (InsufficientFunds accId) = pack $ "Account '" <> show accId <> "' has insufficient funds"
 showError (WrongAmount amount) = pack $ "Amount '" <> show amount <> "' is incorrect"
 showError Other = "Something went wrong"
 
@@ -174,7 +174,7 @@ app s = serve api $ hoistServer api nt server
 
 runServer :: Integer -> IO ()
 runServer port = do
-  let config = Config 1000000 1000000
+  let config = Config 1000000 100000
   let masterAccId = AccountId 0
   (state, n) <- liftIO $ do
     masterAcc <- newTVarIO $ Account masterAccId $ _masterAccountBalance config

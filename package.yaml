@@ -52,7 +52,6 @@ tests:
     source-dirs:         test
     ghc-options:
     - -Wall
-    - -Werror
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
@@ -60,7 +59,12 @@ tests:
     - money-transafer-hs
     - async
     - http-client
+    - HUnit
     - servant
     - servant-client
     - servant-client-core
+    - tasty
+    - tasty-hunit
+    - tasty-quickcheck
+    - QuickCheck
     - wai
